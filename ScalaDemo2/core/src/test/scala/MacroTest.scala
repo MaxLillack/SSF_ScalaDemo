@@ -3,7 +3,7 @@ import org.scalatest.FunSuite
 class MacroTest extends FunSuite {
   test("macrotest") {
 
-	val name = "FuturCar"
+	val name = "FuturisticCar"
 	val car = Demo.CarGenerator.generateCar(name, Seq(
 		Demo.CarConfig.CarBody, 
 		Demo.CarConfig.AutomaticTransmission, 
