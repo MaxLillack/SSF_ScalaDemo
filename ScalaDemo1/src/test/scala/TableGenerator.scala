@@ -5,7 +5,7 @@ import scala.util.parsing.combinator.syntactical._
 import scala.io._
 
 object Data {
-	val xml = """
+	val xml = 
 	<TableScript>
 		<Table name="Project">
 			<ForeignKey fk="Repository" refTable="Repository"/>
@@ -30,7 +30,6 @@ object Data {
 			<Attribute name="Path" type="string" />
 		</Table>
 	</TableScript>
-	"""
 }
 
 
@@ -55,7 +54,7 @@ case class Attribute(name: String, typeName: String)
 
 class TableGeneratorTest extends FunSuite {
   test("test1") {
-	val xml = scala.xml.XML.loadString(Data.xml)
+	val xml = Data.xml
 	val tables = (xml \ "Table").map { table =>
 		val attributes = (table \ "Attribute").map {
 			attribute => Attribute((attribute \ "@name").text,

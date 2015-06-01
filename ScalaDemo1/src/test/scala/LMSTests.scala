@@ -4,24 +4,60 @@ import org.scalatest._
 import scala.virtualization.lms.common._
 import scala.reflect.SourceContext
 
-trait Dsl extends NumericOps with BooleanOps with LiftString with LiftNumeric with LiftBoolean with IfThenElse with Equal with RangeOps with OrderingOps with MiscOps with ArrayOps with StringOps with SeqOps with Functions with While with StaticData with Variables with LiftVariables {
-  implicit def repStrToSeqOps(a: Rep[String]) = new SeqOpsCls(a.asInstanceOf[Rep[Seq[Char]]])
-  def infix_&&&(lhs: Rep[Boolean], rhs: => Rep[Boolean]): Rep[Boolean] =
-    __ifThenElse(lhs, rhs, unit(false))
-  def comment[A:Manifest](l: String, verbose: Boolean = true)(b: => Rep[A])
+// TODO: clean up at least, maybe add to LMS?
+trait UtilOps extends Base {
+  def infix_HashCode[T:Manifest](o: Rep[T])(implicit pos: SourceContext): Rep[Long]
+  def infix_HashCode(o: Rep[String], len: Rep[Int])(implicit pos: SourceContext): Rep[Long]
 }
-trait DslExp extends Dsl with NumericOpsExpOpt with BooleanOpsExp with CompileScala with IfThenElseExpOpt with EqualExpBridgeOpt with RangeOpsExp with OrderingOpsExp with MiscOpsExp with EffectExp with ArrayOpsExpOpt with StringOpsExp with SeqOpsExp with FunctionsRecursiveExp with WhileExp with StaticDataExp with VariablesExp {
+trait UtilOpsExp extends UtilOps with BaseExp {
+  case class ObjHashCode[T:Manifest](o: Rep[T])(implicit pos: SourceContext) extends Def[Long]
+  case class StrSubHashCode(o: Rep[String], len: Rep[Int])(implicit pos: SourceContext) extends Def[Long]
+  def infix_HashCode[T:Manifest](o: Rep[T])(implicit pos: SourceContext) = ObjHashCode(o)
+  def infix_HashCode(o: Rep[String], len: Rep[Int])(implicit pos: SourceContext) = StrSubHashCode(o,len)
+
+  override def mirror[A:Manifest](e: Def[A], f: Transformer)(implicit pos: SourceContext): Exp[A] = (e match {
+    case e@ObjHashCode(a) => infix_HashCode(f(a))
+    case e@StrSubHashCode(o,len) => infix_HashCode(f(o),f(len))
+    case _ => super.mirror(e,f)
+  }).asInstanceOf[Exp[A]]
+}
+trait ScalaGenUtilOps extends ScalaGenBase {
+  val IR: UtilOpsExp
+  import IR._
+
+  override def emitNode(sym: Sym[Any], rhs: Def[Any]) = rhs match {
+    case ObjHashCode(o) => emitValDef(sym, src"$o.##")
+    case _ => super.emitNode(sym, rhs)
+  }
+}
+
+
+trait Dsl extends NumericOps with PrimitiveOps with BooleanOps with LiftString with LiftNumeric with LiftBoolean with IfThenElse with Equal with RangeOps with OrderingOps with MiscOps with ArrayOps with StringOps with SeqOps with Functions with While with StaticData with Variables with LiftVariables with ObjectOps with UtilOps {
+  implicit def repStrToSeqOps(a: Rep[String]) = new SeqOpsCls(a.asInstanceOf[Rep[Seq[Char]]])
+  override def infix_&&(lhs: Rep[Boolean], rhs: => Rep[Boolean])(implicit pos: scala.reflect.SourceContext): Rep[Boolean] =
+    __ifThenElse(lhs, rhs, unit(false))
+  def generate_comment(l: String): Rep[Unit]
+  def comment[A:Manifest](l: String, verbose: Boolean = true)(b: => Rep[A]): Rep[A]
+}
+trait DslExp extends Dsl with NumericOpsExpOpt with PrimitiveOpsExpOpt with BooleanOpsExp with IfThenElseExpOpt with EqualExpBridgeOpt with RangeOpsExp with OrderingOpsExp with MiscOpsExp with EffectExp with ArrayOpsExpOpt with StringOpsExp with SeqOpsExp with FunctionsRecursiveExp with WhileExp with StaticDataExp with VariablesExpOpt with ObjectOpsExpOpt with UtilOpsExp {
   override def boolean_or(lhs: Exp[Boolean], rhs: Exp[Boolean])(implicit pos: SourceContext) : Exp[Boolean] = lhs match {
     case Const(false) => rhs
     case _ => super.boolean_or(lhs, rhs)
   }
+  override def boolean_and(lhs: Exp[Boolean], rhs: Exp[Boolean])(implicit pos: SourceContext) : Exp[Boolean] = lhs match {
+    case Const(true) => rhs
+    case _ => super.boolean_and(lhs, rhs)
+  }
 
+  case class GenerateComment(l: String) extends Def[Unit]
+  def generate_comment(l: String) = reflectEffect(GenerateComment(l))
   case class Comment[A:Manifest](l: String, verbose: Boolean, b: Block[A]) extends Def[A]
-  def comment[A:Manifest](l: String, verbose: Boolean)(b: => Rep[A]) = {
+  def comment[A:Manifest](l: String, verbose: Boolean)(b: => Rep[A]): Rep[A] = {
     val br = reifyEffects(b)
     val be = summarizeEffects(br)
-    reflectEffect(Comment(l, verbose, br), be)
+    reflectEffect[A](Comment(l, verbose, br), be)
   }
+
   override def boundSyms(e: Any): List[Sym[Any]] = e match {
     case Comment(_, _, b) => effectSyms(b)
     case _ => super.boundSyms(e)
@@ -33,15 +69,34 @@ trait DslExp extends Dsl with NumericOpsExpOpt with BooleanOpsExp with CompileSc
       if (y.isInstanceOf[Int]) unit(y) else staticData(y)
     case _ => super.array_apply(x,n)
   }
+
+  // TODO: should this be in LMS?
+  override def isPrimitiveType[T](m: Manifest[T]) = (m == manifest[String]) || super.isPrimitiveType(m)
 }
-trait DslGen extends ScalaGenNumericOps with ScalaGenBooleanOps with ScalaGenIfThenElse with ScalaGenEqual with ScalaGenRangeOps with ScalaGenOrderingOps with ScalaGenMiscOps with ScalaGenArrayOps with ScalaGenStringOps with ScalaGenSeqOps with ScalaGenFunctions with ScalaGenWhile with ScalaGenStaticData with ScalaGenVariables {
+trait DslGen extends ScalaGenNumericOps
+    with ScalaGenPrimitiveOps with ScalaGenBooleanOps with ScalaGenIfThenElse
+    with ScalaGenEqual with ScalaGenRangeOps with ScalaGenOrderingOps
+    with ScalaGenMiscOps with ScalaGenArrayOps with ScalaGenStringOps
+    with ScalaGenSeqOps with ScalaGenFunctions with ScalaGenWhile
+    with ScalaGenStaticData with ScalaGenVariables
+    with ScalaGenObjectOps
+    with ScalaGenUtilOps {
   val IR: DslExp
 
   import IR._
 
+  override def quote(x: Exp[Any]) = x match {
+    case Const('\n') if x.tp == manifest[Char] => "'\\n'"
+    case Const('\t') if x.tp == manifest[Char] => "'\\t'"
+    case _ => super.quote(x)
+  }
   override def emitNode(sym: Sym[Any], rhs: Def[Any]) = rhs match {
     case IfThenElse(c,Block(Const(true)),Block(Const(false))) =>
       emitValDef(sym, quote(c))
+    case PrintF(f:String,xs) => 
+      emitValDef(sym, src"printf(${Const(f)::xs})")
+    case GenerateComment(s) =>
+      stream.println("// "+s)
     case Comment(s, verbose, b) =>
       stream.println("val " + quote(sym) + " = {")
       stream.println("//#" + s)
@@ -58,7 +113,7 @@ trait DslGen extends ScalaGenNumericOps with ScalaGenBooleanOps with ScalaGenIfT
   }
 }
 trait DslImpl extends DslExp { q =>
-  object codegen extends DslGen {
+  val codegen = new DslGen {
     val IR: q.type = q
   }
 }
@@ -67,7 +122,7 @@ abstract class DslSnippet[A:Manifest,B:Manifest] extends Dsl {
   def snippet(x: Rep[A]): Rep[B]
 }
 
-abstract class DslDriver[A:Manifest,B:Manifest] extends DslSnippet[A,B] with DslImpl {
+abstract class DslDriver[A:Manifest,B:Manifest] extends DslSnippet[A,B] with DslImpl with CompileScala {
   lazy val f = compile(snippet)
   def eval(x: A): B = f(x)
   lazy val code: String = {
@@ -154,6 +209,7 @@ class LMSTests extends FunSuite {
       def snippet(b: Rep[Int]) =  power(b, 3)
       //#power
     }
+	println("power")
     assert(snippet.eval(2) === 8)
     println(snippet.code)
   }
@@ -252,5 +308,7 @@ class LMSTests extends FunSuite {
     }
 
     println(snippet.code)
+	val v = scala.Array(5, 4, 3, 2, 1)
+	println(snippet.eval(v).deep.mkString(" "))
   }
 }

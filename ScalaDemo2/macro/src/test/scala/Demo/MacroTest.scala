@@ -10,6 +10,6 @@ class MacroDemoTest extends FunSuite {
   }
   test("demo3") {
     val x = 5
-	Demo.MacroDemo.printf("hello %s %d (%s)", "world", 123, "!")
+	Demo.MacroDemo.printf("hello %s %d (%s)\n", "world", 123, "!")
   }
 }

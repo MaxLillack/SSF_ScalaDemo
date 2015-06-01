@@ -1,0 +1,5 @@
+LMS setup
+C:\Users\Max\Tools\lms\virtualization-lms-core
+
+Setting jdk for sbt:
+sbt -java-home "C:\Program Files\Java\jdk1.8.0_25" publish-local

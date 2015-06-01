@@ -8,7 +8,7 @@ class VirtualizedTests extends FunSuite {
 		thenp
 		}
 
-	  val x0 = if(false) 1 else 2 // virtualized to: ‘__ifThenElse(false, 1, 2)‘
-	  println(x0)
+	  val x0 = if(false) "Foo" else "Bar" // virtualized to: ‘__ifThenElse(false, 1, 2)‘
+	  println(x0) // if:false Foo
   }
 }
