@@ -1,7 +1,7 @@
 SSF_ScalaDemo
 =============
 
-Example code for "DSLs with Scala"
+Example code for "DSLs with Scala" based on https://github.com/scala-lms/tutorials/
 
 1. Install SBT
 
